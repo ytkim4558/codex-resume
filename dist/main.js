@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { constants } from "node:fs";
+import { constants, existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { emitKeypressEvents } from "node:readline";
@@ -88,18 +88,23 @@ function detectCodexPaths() {
 
 async function runDoctor() {
   const paths = detectCodexPaths();
-  const codex = await commandExists("codex");
+  const codexCommand = resolveCodexCommand();
+  const codex = await commandExists(codexCommand);
   const sessionsReadable = await isReadable(paths.sessionsDir);
   const cacheReadable = await isReadable(paths.cacheDir);
 
   console.log("codex-resume doctor");
   console.log(`version: ${VERSION}`);
-  console.log(`codex command: ${codex ? "found" : "not found"}`);
+  console.log(`codex command: ${codexCommand}`);
+  console.log(`codex available: ${codex}`);
   console.log(`codex home: ${paths.codexHome}`);
   console.log(`sessions dir: ${paths.sessionsDir}`);
   console.log(`sessions readable: ${sessionsReadable}`);
   console.log(`cache dir: ${paths.cacheDir}`);
   console.log(`cache readable: ${cacheReadable}`);
+  if (!codex) {
+    console.log("hint: install Codex CLI with `npm install -g @openai/codex` or set CODEX_RESUME_CODEX_BIN.");
+  }
 }
 
 async function runIndex() {
@@ -129,11 +134,12 @@ async function runResume(sessionId) {
   const sessions = await buildSessionIndex(detectCodexPaths().sessionsDir);
   const match = findSession(sessions, sessionId);
   if (!match) throw new Error(`Session not found: ${sessionId}`);
-  if (!(await commandExists("codex"))) {
-    throw new Error("`codex` command was not found in PATH. Run this inside a shell where Codex CLI is available.");
+  const codexCommand = resolveCodexCommand();
+  if (!(await commandExists(codexCommand))) {
+    throw new Error("Codex CLI was not found. Install with `npm install -g @openai/codex` or set CODEX_RESUME_CODEX_BIN.");
   }
   console.log(`Starting: codex resume ${match.sessionId}`);
-  const code = await runCommand("codex", ["resume", match.sessionId]);
+  const code = await runCommand(codexCommand, ["resume", match.sessionId]);
   process.exitCode = code;
 }
 
@@ -211,11 +217,12 @@ async function runPicker(command) {
             resolve();
             return;
           }
-          if (!(await commandExists("codex"))) {
-            throw new Error("`codex` command was not found in PATH. Run this inside a shell where Codex CLI is available.");
+          const codexCommand = resolveCodexCommand();
+          if (!(await commandExists(codexCommand))) {
+            throw new Error("Codex CLI was not found. Install with `npm install -g @openai/codex` or set CODEX_RESUME_CODEX_BIN.");
           }
           console.log(`Starting: codex resume ${selected.sessionId}`);
-          const code = await runCommand("codex", ["resume", selected.sessionId]);
+          const code = await runCommand(codexCommand, ["resume", selected.sessionId]);
           process.exitCode = code;
           resolve();
           return;
@@ -336,14 +343,15 @@ async function runBlessedPicker(blessed, sessions, initialQuery) {
   list.on("select item", async () => {
     const session = selectedSession();
     if (!session) return;
-    if (!(await commandExists("codex"))) {
-      setHeader("`codex` command not found in PATH");
+    const codexCommand = resolveCodexCommand();
+    if (!(await commandExists(codexCommand))) {
+      setHeader("Codex CLI not found. Install @openai/codex or set CODEX_RESUME_CODEX_BIN.");
       screen.render();
       return;
     }
     screen.destroy();
     console.log(`Starting: codex resume ${session.sessionId}`);
-    const code = await runCommand("codex", ["resume", session.sessionId]);
+    const code = await runCommand(codexCommand, ["resume", session.sessionId]);
     process.exitCode = code;
   });
 
@@ -685,8 +693,25 @@ function compareByUpdatedAtDesc(left, right) {
   return (right.updatedAt || "").localeCompare(left.updatedAt || "");
 }
 
+function resolveCodexCommand() {
+  const override = process.env.CODEX_RESUME_CODEX_BIN?.trim();
+  if (override) return override;
+  if (process.platform !== "win32") return "codex";
+  const candidates = [
+    process.env.APPDATA ? join(process.env.APPDATA, "npm", "codex.cmd") : undefined,
+    process.env.USERPROFILE ? join(process.env.USERPROFILE, "AppData", "Roaming", "npm", "codex.cmd") : undefined
+  ];
+  for (const candidate of candidates) {
+    if (candidate && existsSync(candidate)) return candidate;
+  }
+  return "codex.cmd";
+}
+
 async function commandExists(command) {
-  const probe = process.platform === "win32" ? "where" : "which";
+  if (command.includes("\\") || command.includes("/")) {
+    return existsSync(command);
+  }
+  const probe = process.platform === "win32" ? "where.exe" : "which";
   const code = await runCommand(probe, [command], { silent: true });
   return code === 0;
 }
@@ -709,7 +734,17 @@ async function runCommand(command, args, options = {}) {
     });
     child.on("error", (error) => {
       if (options.silent) resolve(1);
-      else reject(error);
+      else if (error.code === "ENOENT") {
+        reject(
+          new Error(
+            [
+              `Command not found: ${command}`,
+              "Install OpenAI Codex CLI or set CODEX_RESUME_CODEX_BIN to the full executable path.",
+              "Windows example: npm install -g @openai/codex"
+            ].join("\n")
+          )
+        );
+      } else reject(error);
     });
     child.on("exit", (code) => resolve(code ?? 1));
   });

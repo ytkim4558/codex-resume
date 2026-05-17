@@ -35,6 +35,20 @@ codex-resume list --json
 codex-resume resume <session-id>
 ```
 
+`codex-resume` 는 세션 목록을 `%USERPROFILE%\.codex\sessions` 에서 읽기 때문에 어느 폴더에서 실행해도 목록 조회는 가능하다.
+다만 `Enter` 또는 `resume <session-id>` 로 실제 `codex resume` 을 시작하면 **그때의 현재 폴더가 새 Codex 세션의 작업 폴더**가 된다.
+사이트 작업은 `GitHubPageMaker`, 도구 작업은 `codex-resume` 처럼 실제 수정할 프로젝트 폴더에서 실행하는 편이 안전하다.
+
+Windows 에서 `codex` 명령이 PATH 에 없으면 다음 환경변수로 실제 CLI 경로를 지정할 수 있다.
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+  'CODEX_RESUME_CODEX_BIN',
+  "$env:APPDATA\npm\codex.cmd",
+  'User'
+)
+```
+
 ## 조작
 
 기본 실행(`codex-resume` 또는 `node .\dist\main.js`)은 키보드 picker 를 띄운다.
