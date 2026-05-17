@@ -2,11 +2,13 @@
 import { access, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { emitKeypressEvents } from "node:readline";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 
 const VERSION = "0.1.0";
+const require = createRequire(import.meta.url);
 
 async function main() {
   const command = parseArgv(process.argv.slice(2));
@@ -143,6 +145,12 @@ async function runPicker(command) {
     return;
   }
 
+  const blessed = loadBlessed();
+  if (blessed) {
+    await runBlessedPicker(blessed, sessions, command.query || "");
+    return;
+  }
+
   let query = command.query || "";
   let cursor = 0;
   let filtered = searchSessions(sessions, query);
@@ -225,17 +233,209 @@ async function runPicker(command) {
   });
 }
 
+async function runBlessedPicker(blessed, sessions, initialQuery) {
+  let query = initialQuery;
+  let filtered = searchSessions(sessions, query);
+
+  const screen = blessed.screen({
+    smartCSR: true,
+    fullUnicode: true,
+    title: "codex-resume"
+  });
+
+  const header = blessed.box({
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: 3,
+    tags: true,
+    padding: { left: 1, right: 1 },
+    style: { fg: "white", bg: "blue" }
+  });
+
+  const list = blessed.list({
+    top: 3,
+    left: 0,
+    width: "42%",
+    height: "100%-4",
+    keys: true,
+    mouse: true,
+    vi: true,
+    tags: true,
+    border: { type: "line" },
+    label: " Sessions ",
+    scrollbar: { ch: " ", track: { bg: "black" }, style: { bg: "cyan" } },
+    style: {
+      border: { fg: "cyan" },
+      selected: { bg: "cyan", fg: "black", bold: true },
+      item: { fg: "white" }
+    }
+  });
+
+  const preview = blessed.box({
+    top: 3,
+    left: "42%",
+    width: "58%",
+    height: "100%-4",
+    keys: true,
+    mouse: true,
+    scrollable: true,
+    alwaysScroll: true,
+    tags: true,
+    border: { type: "line" },
+    label: " Detail ",
+    padding: { left: 1, right: 1 },
+    scrollbar: { ch: " ", track: { bg: "black" }, style: { bg: "cyan" } },
+    style: { border: { fg: "cyan" }, fg: "white" }
+  });
+
+  const footer = blessed.box({
+    bottom: 0,
+    left: 0,
+    width: "100%",
+    height: 1,
+    tags: true,
+    content: " Type to search  Backspace delete  ↑/↓ move  Enter resume  Tab detail  q/Esc quit ",
+    style: { fg: "black", bg: "white" }
+  });
+
+  screen.append(header);
+  screen.append(list);
+  screen.append(preview);
+  screen.append(footer);
+
+  function setHeader(message = "") {
+    const status = message ? `  {yellow-fg}${escapeTags(message)}{/}` : "";
+    header.setContent(`{bold}codex-resume{/bold}  OpenAI Codex session browser\nSearch: {cyan-fg}${escapeTags(query || "(type to filter)")}{/}${status}`);
+  }
+
+  function updateList(keepIndex = 0) {
+    filtered = searchSessions(sessions, query);
+    const labels = filtered.map((session) => formatBlessedListLine(session));
+    list.setItems(labels.length ? labels : [" No matching sessions"]);
+    list.select(Math.min(Math.max(0, keepIndex), Math.max(0, labels.length - 1)));
+    updatePreview();
+    setHeader();
+    screen.render();
+  }
+
+  function selectedSession() {
+    return filtered[list.selected ?? 0];
+  }
+
+  function updatePreview() {
+    const session = selectedSession();
+    if (!session) {
+      preview.setContent("{center}No matching sessions{/center}");
+      return;
+    }
+    preview.setContent(buildBlessedPreview(session));
+    preview.setScroll(0);
+  }
+
+  list.on("select item", async () => {
+    const session = selectedSession();
+    if (!session) return;
+    if (!(await commandExists("codex"))) {
+      setHeader("`codex` command not found in PATH");
+      screen.render();
+      return;
+    }
+    screen.destroy();
+    console.log(`Starting: codex resume ${session.sessionId}`);
+    const code = await runCommand("codex", ["resume", session.sessionId]);
+    process.exitCode = code;
+  });
+
+  list.on("select", updatePreview);
+
+  screen.key(["escape", "q", "C-c"], () => {
+    screen.destroy();
+  });
+
+  screen.key(["tab"], () => {
+    preview.focus();
+    screen.render();
+  });
+
+  preview.key(["tab", "escape"], () => {
+    list.focus();
+    screen.render();
+  });
+
+  screen.key(["backspace", "C-h"], () => {
+    query = query.slice(0, -1);
+    updateList(0);
+  });
+
+  screen.on("keypress", (ch, key) => {
+    if (!ch || key.ctrl || key.meta) return;
+    if (key.name && ["up", "down", "left", "right", "return", "enter", "escape", "tab", "backspace"].includes(key.name)) return;
+    if (ch >= " ") {
+      query += ch;
+      updateList(0);
+    }
+  });
+
+  updateList(0);
+  list.focus();
+  await new Promise((resolve) => screen.on("destroy", resolve));
+}
+
+function loadBlessed() {
+  try {
+    return require("blessed");
+  } catch {
+    return null;
+  }
+}
+
+function formatBlessedListLine(session) {
+  const summary = escapeTags(session.summary || session.title || session.sessionId);
+  const date = formatDate(session.updatedAt);
+  const count = String(session.messageCount).padStart(3, " ");
+  return ` {cyan-fg}${date}{/} {yellow-fg}${count}{/} ${summary}`;
+}
+
+function buildBlessedPreview(session) {
+  const summary = escapeTags(session.summary || makeSummary(session.firstUserMessage, session.lastAssistantMessage) || "(no summary)");
+  const cwd = escapeTags(session.cwd || "(unknown)");
+  const id = escapeTags(session.sessionId);
+  const updated = escapeTags(formatDate(session.updatedAt));
+  const user = escapeTags(cleanForDisplay(session.firstUserMessage || "(none)"));
+  const assistant = escapeTags(cleanForDisplay(session.lastAssistantMessage || "(none)"));
+
+  return [
+    `{bold}{cyan-fg}Summary{/} ${summary}`,
+    "",
+    `{bold}Updated{/}  ${updated}`,
+    `{bold}Messages{/} ${session.messageCount}`,
+    `{bold}ID{/}       ${id}`,
+    `{bold}CWD{/}      ${cwd}`,
+    "",
+    "{bold}{green-fg}User request{/}",
+    user,
+    "",
+    "{bold}{magenta-fg}Latest assistant{/}",
+    assistant
+  ].join("\n");
+}
+
+function escapeTags(value) {
+  return String(value).replace(/[{}]/g, "");
+}
+
 function drawPicker(sessions, cursor, query) {
   const columns = process.stdout.columns || 120;
   const rows = process.stdout.rows || 32;
-  const listWidth = Math.max(42, Math.floor(columns * 0.45));
-  const previewWidth = Math.max(30, columns - listWidth - 3);
+  const listWidth = Math.min(Math.max(52, Math.floor(columns * 0.43)), Math.max(52, columns - 64));
+  const previewWidth = Math.max(36, columns - listWidth - 3);
   const selected = sessions[cursor];
 
-  console.log("codex-resume");
-  console.log(`Search: ${query || ""}`);
-  console.log("Use arrows to move, type to search, Enter to resume, q/Esc to quit");
-  console.log(`${"=".repeat(columns)}`);
+  console.log(fitLine("codex-resume  OpenAI Codex session browser", columns));
+  console.log(fitLine(`Search: ${query || "(type to filter)"}`, columns));
+  console.log(fitLine("Up/Down move  Enter resume  q/Esc quit", columns));
+  console.log(repeatCell("─", columns));
 
   const maxRows = Math.max(5, rows - 6);
   const previewLines = selected ? buildPreview(selected, previewWidth).slice(0, maxRows) : ["No matching sessions"];
@@ -246,7 +446,7 @@ function drawPicker(sessions, cursor, query) {
     const absoluteIndex = sessions.indexOf(item);
     const left = item ? formatPickerLine(item, absoluteIndex === cursor, listWidth) : "";
     const right = previewLines[i] ?? "";
-    console.log(`${padRight(left, listWidth)} | ${right}`);
+    console.log(`${padRightCells(left, listWidth)} │ ${fitLine(right, previewWidth)}`);
   }
 }
 
@@ -258,25 +458,27 @@ function windowAround(items, cursor, size) {
 function formatPickerLine(session, selected, width) {
   const marker = selected ? ">" : " ";
   const date = formatDate(session.updatedAt);
-  const title = session.title || session.firstUserMessage || session.sessionId;
-  return truncate(`${marker} ${date} ${session.messageCount.toString().padStart(3, " ")} ${title}`, width);
+  const title = session.summary || session.title || session.firstUserMessage || session.sessionId;
+  return fitLine(`${marker} ${date} ${session.messageCount.toString().padStart(3, " ")} ${title}`, width);
 }
 
 function buildPreview(session, width) {
+  const summary = session.summary || makeSummary(session.firstUserMessage, session.lastAssistantMessage);
   const lines = [
-    `id: ${session.sessionId}`,
-    `cwd: ${session.cwd || "(unknown)"}`,
-    `updated: ${session.updatedAt || "(unknown)"}`,
-    `messages: ${session.messageCount}`,
-    `file: ${session.sourcePath}`,
+    "Selected session",
+    repeatCell("─", width),
+    `Summary  ${summary}`,
+    `Time     ${formatDate(session.updatedAt)}    Messages ${session.messageCount}`,
+    `ID       ${session.sessionId}`,
+    `CWD      ${compactPath(session.cwd || "(unknown)", Math.max(20, width - 9))}`,
     "",
-    "first user:",
-    ...(wrap(session.firstUserMessage || "(none)", width)),
+    "User request",
+    ...wrapForCells(session.firstUserMessage || "(none)", width),
     "",
-    "last assistant:",
-    ...(wrap(session.lastAssistantMessage || "(none)", width))
+    "Latest assistant",
+    ...wrapForCells(session.lastAssistantMessage || "(none)", width)
   ];
-  return lines.map((line) => truncate(line, width));
+  return lines.map((line) => fitLine(line, width));
 }
 
 async function buildSessionIndex(rootDir) {
@@ -366,11 +568,13 @@ async function parseSessionFile(filePath) {
 
   const firstUser = messages.find((message) => message.role === "user");
   const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-  const title = makeTitle(firstUser?.content, filePath);
+  const summary = makeSummary(firstUser?.content, lastAssistant?.content);
+  const title = summary || makeTitle(firstUser?.content, filePath);
 
   return {
     sessionId,
     title,
+    summary,
     cwd,
     cliVersion,
     startedAt,
@@ -408,7 +612,42 @@ function stringValue(value) {
 
 function makeTitle(text, filePath) {
   if (!text) return basename(filePath);
-  return truncate(oneLine(text), 90);
+  return fitLine(cleanForDisplay(text), 90);
+}
+
+function makeSummary(firstUser, lastAssistant) {
+  const user = cleanForDisplay(firstUser || "");
+  const assistant = cleanForDisplay(lastAssistant || "");
+  if (!user && !assistant) return "";
+
+  const userSummary = summarizeText(user);
+  const assistantSummary = summarizeText(assistant);
+  if (userSummary && assistantSummary && !assistantSummary.includes(userSummary)) {
+    return fitLine(`${userSummary} / ${assistantSummary}`, 120);
+  }
+  return fitLine(userSummary || assistantSummary, 120);
+}
+
+function summarizeText(text) {
+  const clean = cleanForDisplay(text);
+  if (!clean) return "";
+
+  const requestMatch = clean.match(/(?:내 요청|요청|request)[^:：]*[:：]\s*(.+)/i);
+  if (requestMatch?.[1]) return fitLine(requestMatch[1], 96);
+
+  const firstSentence = clean.split(/(?<=[.!?。！？])\s+|(?:\s+-\s+)|(?:\s+##\s+)/).find(Boolean) || clean;
+  return fitLine(firstSentence, 96);
+}
+
+function cleanForDisplay(value) {
+  return oneLine(value)
+    .replace(/# Files mentioned by the user:\s*/gi, "")
+    .replace(/##\s+/g, "")
+    .replace(/<image[^>]*>/gi, "[image]")
+    .replace(/<\/image>/gi, "")
+    .replace(/\bVRChat\b/g, "VR")
+    .replace(/[A-Z]:[\\/][^\s]+/g, (path) => compactPath(path, 42))
+    .trim();
 }
 
 function isNoiseMessage(text) {
@@ -477,7 +716,7 @@ async function runCommand(command, args, options = {}) {
 }
 
 function formatListLine(index, session) {
-  return `${String(index + 1).padStart(2, " ")}  ${formatDate(session.updatedAt)}  ${session.sessionId}  ${session.title || ""}`;
+  return `${String(index + 1).padStart(2, " ")}  ${formatDate(session.updatedAt)}  ${session.sessionId}  ${session.summary || session.title || ""}`;
 }
 
 function formatDate(value) {
@@ -491,31 +730,73 @@ function oneLine(value) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function truncate(value, width) {
+function fitLine(value, width) {
   const clean = oneLine(value);
-  if (clean.length <= width) return clean;
-  return `${clean.slice(0, Math.max(0, width - 1))}…`;
+  let output = "";
+  for (const char of clean) {
+    if (cellWidth(output + char) > Math.max(0, width - 1)) return `${output}…`;
+    output += char;
+  }
+  return output;
 }
 
-function padRight(value, width) {
-  if (value.length >= width) return value;
-  return value + " ".repeat(width - value.length);
+function padRightCells(value, width) {
+  const current = cellWidth(value);
+  if (current >= width) return fitLine(value, width);
+  return value + " ".repeat(width - current);
 }
 
-function wrap(value, width) {
-  const words = oneLine(value).split(" ");
+function wrapForCells(value, width) {
+  const words = cleanForDisplay(value).split(" ");
   const lines = [];
   let line = "";
   for (const word of words) {
-    if ((line + " " + word).trim().length > width) {
+    const candidate = (line + " " + word).trim();
+    if (cellWidth(candidate) > width) {
       if (line) lines.push(line);
-      line = word;
+      line = fitLine(word, width);
     } else {
-      line = (line + " " + word).trim();
+      line = candidate;
     }
   }
   if (line) lines.push(line);
   return lines.length ? lines : [""];
+}
+
+function cellWidth(value) {
+  let width = 0;
+  for (const char of value) {
+    const code = char.codePointAt(0) || 0;
+    width += isWideCodePoint(code) ? 2 : 1;
+  }
+  return width;
+}
+
+function isWideCodePoint(code) {
+  return (code >= 0x1100 && code <= 0x115f)
+    || code === 0x2329
+    || code === 0x232a
+    || (code >= 0x2e80 && code <= 0xa4cf)
+    || (code >= 0xac00 && code <= 0xd7a3)
+    || (code >= 0xf900 && code <= 0xfaff)
+    || (code >= 0xfe10 && code <= 0xfe19)
+    || (code >= 0xfe30 && code <= 0xfe6f)
+    || (code >= 0xff00 && code <= 0xff60)
+    || (code >= 0xffe0 && code <= 0xffe6);
+}
+
+function repeatCell(char, width) {
+  return char.repeat(Math.max(0, Math.floor(width / cellWidth(char))));
+}
+
+function compactPath(path, width) {
+  const clean = oneLine(path);
+  if (cellWidth(clean) <= width) return clean;
+  const parts = clean.split(/[\\/]+/);
+  if (parts.length <= 2) return fitLine(clean, width);
+  const tail = parts.slice(-2).join("\\");
+  const root = parts[0] || "";
+  return fitLine(`${root}\\...\\${tail}`, width);
 }
 
 main().catch((error) => {
