@@ -1,0 +1,19 @@
+{
+  "name": "codex-resume",
+  "version": "0.1.0",
+  "description": "Windows-friendly TUI/CLI to browse and resume OpenAI Codex CLI sessions.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "codex-resume": "./dist/main.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "node dist/main.js --version",
+    "check": "node dist/main.js doctor",
+    "dev": "node dist/main.js",
+    "start": "node dist/main.js"
+  }
+}

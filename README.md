@@ -1,0 +1,88 @@
+# codex-resume
+
+OpenAI Codex CLI 세션을 빠르게 검색하고 이어갈 수 있게 만드는 Windows 친화형 TUI/CLI.
+
+`codex resume` 의 기본 picker 는 세션 누락, 이름 표시, workspace 집중도 측면에서
+아쉬운 경우가 있다. `codex-resume` 는 로컬 `~/.codex/sessions` 로그를 직접
+인덱싱해서 다음 흐름을 더 빠르게 만든다.
+
+- 최근 세션 검색
+- 현재 workspace 기준 필터링
+- 대화 preview 확인
+- 선택한 세션을 `codex resume <session-id>` 로 재개
+
+## 목표
+
+- Windows PowerShell / CMD / Windows Terminal 친화성
+- 로컬 로그 직접 파싱
+- 빠른 재인덱싱과 안정적인 preview
+- Codex의 native resume 흐름 재사용
+
+## 현재 상태
+
+현재 저장소는 **dependency-free MVP** 단계다. 외부 TUI 라이브러리 없이 Node.js
+기본 모듈만 사용해 세션 경로 탐지, JSONL 파싱, 검색, preview, resume handoff 를
+먼저 구현했다.
+
+## 계획된 명령
+
+```powershell
+codex-resume
+codex-resume doctor
+codex-resume index
+codex-resume list --json
+codex-resume resume <session-id>
+```
+
+## 조작
+
+기본 실행(`codex-resume` 또는 `node .\dist\main.js`)은 간단한 키보드 picker 를
+띄운다.
+
+| 키 | 동작 |
+|---|---|
+| 문자 입력 | 세션 검색 |
+| Backspace | 검색어 삭제 |
+| Up / Down | 세션 이동 |
+| Enter | 선택한 세션으로 `codex resume <session-id>` 실행 |
+| q / Esc / Ctrl+C | 종료 |
+
+## 캐시
+
+`codex-resume index` 는 아래 파일에 세션 인덱스를 저장한다.
+
+```text
+%USERPROFILE%\.codex\codex-resume\session-index.json
+```
+
+현재 picker/list 는 최신 로그를 직접 읽는다. 캐시는 이후 빠른 시작과 TUI 최적화에
+사용할 수 있도록 먼저 생성해 둔다.
+
+로컬 개발 중에는 빌드 없이 바로 실행할 수 있다.
+
+```powershell
+node .\dist\main.js
+node .\dist\main.js list --limit 10
+node .\dist\main.js resume <session-id>
+```
+
+## 아키텍처 요약
+
+- `src/core`: 세션 모델, 파서, 인덱서, 검색, resume 로직
+- `src/infra`: Codex 경로 탐지, 로컬 캐시, 프로세스 실행
+- `src/cli`: 명령 파싱과 실행 진입점
+- `docs/`: 구현 메모, Windows 동작 기준, 포트폴리오 반영 문안
+
+세부 설계는 [docs/architecture.md](docs/architecture.md) 참고.
+
+## 개발 방향
+
+1. `~/.codex/sessions` 스캔
+2. 세션 메타 인덱스 생성
+3. CLI `doctor` / `list` / `index` / `resume`
+4. 간단한 키보드 기반 picker
+5. PowerShell / CMD 래퍼 개선
+
+## 라이선스
+
+[MIT](LICENSE)
