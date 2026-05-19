@@ -46,91 +46,12 @@ function stringOption(argv, name) {
 }
 
 // src/cli/run-app.ts
-async function runApp(_command) {
-  console.log("The dependency-free picker is implemented in dist/main.js.");
-  console.log("Run `node .\\dist\\main.js` while the TypeScript source is being promoted.");
-}
-
-// src/cli/run-doctor.ts
-import { access } from "node:fs/promises";
-import { constants } from "node:fs";
-
-// src/infra/codex-paths.ts
-import { homedir } from "node:os";
-import { join } from "node:path";
-function detectCodexPaths() {
-  const home = homedir();
-  const codexHome = join(home, ".codex");
-  return {
-    codexHome,
-    sessionsDir: join(codexHome, "sessions"),
-    cacheDir: join(codexHome, "codex-resume")
-  };
-}
-
-// src/core/session-resumer.ts
-import { existsSync } from "node:fs";
-import { join as join2 } from "node:path";
-function buildResumeCommand(session) {
-  return [resolveCodexCommand(), "resume", session.sessionId];
-}
-function resolveCodexCommand() {
-  const override = process.env.CODEX_RESUME_CODEX_BIN?.trim();
-  if (override) return override;
-  if (process.platform !== "win32") return "codex";
-  const candidates = [
-    process.env.APPDATA ? join2(process.env.APPDATA, "npm", "codex.cmd") : void 0,
-    process.env.USERPROFILE ? join2(process.env.USERPROFILE, "AppData", "Roaming", "npm", "codex.cmd") : void 0
-  ];
-  for (const candidate of candidates) {
-    if (candidate && existsSync(candidate)) return candidate;
-  }
-  return "codex.cmd";
-}
-
-// src/infra/command-exists.ts
-import { spawn } from "node:child_process";
-async function commandExists(command) {
-  const probe = process.platform === "win32" ? "where.exe" : "command";
-  const args = process.platform === "win32" ? [command] : ["-v", command];
-  return new Promise((resolve) => {
-    const child = spawn(probe, args, { stdio: "ignore", shell: process.platform !== "win32" });
-    child.on("error", () => resolve(false));
-    child.on("exit", (code) => resolve(code === 0));
-  });
-}
-
-// src/cli/run-doctor.ts
-async function runDoctor() {
-  const paths = detectCodexPaths();
-  const sessionsReadable = await isReadable(paths.sessionsDir);
-  const cacheReadable = await isReadable(paths.cacheDir);
-  const codexCommand = resolveCodexCommand();
-  const codexAvailable = await commandExists(codexCommand);
-  console.log("codex-resume doctor");
-  console.log(`codex home: ${paths.codexHome}`);
-  console.log(`sessions dir: ${paths.sessionsDir}`);
-  console.log(`cache dir: ${paths.cacheDir}`);
-  console.log(`sessions readable: ${sessionsReadable}`);
-  console.log(`cache readable: ${cacheReadable}`);
-  console.log(`codex command: ${codexCommand}`);
-  console.log(`codex available: ${codexAvailable}`);
-  if (!codexAvailable) {
-    console.log("hint: install Codex CLI with `npm install -g @openai/codex` or set CODEX_RESUME_CODEX_BIN.");
-  }
-}
-async function isReadable(path) {
-  try {
-    await access(path, constants.R_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { createInterface } from "node:readline/promises";
+import { stdin, stdout } from "node:process";
 
 // src/core/session-indexer.ts
 import { readdir } from "node:fs/promises";
-import { join as join3 } from "node:path";
+import { join } from "node:path";
 
 // src/core/session-parser.ts
 import { readFile } from "node:fs/promises";
@@ -243,7 +164,7 @@ async function walk(currentDir, output) {
     return;
   }
   for (const entry of entries) {
-    const fullPath = join3(currentDir, entry.name);
+    const fullPath = join(currentDir, entry.name);
     if (entry.isDirectory()) {
       await walk(fullPath, output);
       continue;
@@ -275,49 +196,45 @@ function compareByUpdatedAtDesc(left, right) {
   return rightValue.localeCompare(leftValue);
 }
 
-// src/cli/run-index.ts
-async function runIndex() {
-  const paths = detectCodexPaths();
-  const sessions = await buildSessionIndex(paths.sessionsDir);
-  console.log(`indexed sessions: ${sessions.length}`);
+// src/core/session-resumer.ts
+import { existsSync } from "node:fs";
+import { join as join2 } from "node:path";
+function buildResumeCommand(session) {
+  return [resolveCodexCommand(), "resume", session.sessionId];
+}
+function resolveCodexCommand() {
+  const override = process.env.CODEX_RESUME_CODEX_BIN?.trim();
+  if (override) return override;
+  if (process.platform !== "win32") return "codex";
+  const candidates = [
+    process.env.APPDATA ? join2(process.env.APPDATA, "npm", "codex.cmd") : void 0,
+    process.env.USERPROFILE ? join2(process.env.USERPROFILE, "AppData", "Roaming", "npm", "codex.cmd") : void 0
+  ];
+  for (const candidate of candidates) {
+    if (candidate && existsSync(candidate)) return candidate;
+  }
+  return "codex.cmd";
 }
 
-// src/core/session-search.ts
-function searchSessions(sessions, query) {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) {
-    return sessions;
-  }
-  return sessions.filter((session) => {
-    return [
-      session.sessionId,
-      session.title,
-      session.cwd,
-      session.firstUserMessage,
-      session.lastAssistantMessage
-    ].filter((value) => Boolean(value)).some((value) => value.toLowerCase().includes(normalized));
-  });
-}
-
-// src/cli/run-list.ts
-async function runList(command) {
-  const paths = detectCodexPaths();
-  const sessions = searchSessions(await buildSessionIndex(paths.sessionsDir), command.query).slice(0, command.limit);
-  if (command.json) {
-    console.log(JSON.stringify(sessions, null, 2));
-    return;
-  }
-  for (const [index, session] of sessions.entries()) {
-    console.log(`${String(index + 1).padStart(2, " ")} ${session.updatedAt ?? "unknown"} ${session.sessionId} ${session.title ?? ""}`.trim());
-  }
+// src/infra/codex-paths.ts
+import { homedir } from "node:os";
+import { join as join3 } from "node:path";
+function detectCodexPaths() {
+  const home = homedir();
+  const codexHome = join3(home, ".codex");
+  return {
+    codexHome,
+    sessionsDir: join3(codexHome, "sessions"),
+    cacheDir: join3(codexHome, "codex-resume")
+  };
 }
 
 // src/infra/process-runner.ts
-import { spawn as spawn2 } from "node:child_process";
+import { spawn } from "node:child_process";
 var isWindows = process.platform === "win32";
 async function runCommand(command, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn2(command, args, {
+    const child = spawn(command, args, {
       stdio: "inherit",
       shell: isWindows,
       windowsHide: true
@@ -351,6 +268,133 @@ async function runResume(command) {
   const [binary, ...args] = buildResumeCommand(session);
   const code = await runCommand(binary, args);
   process.exitCode = code;
+}
+
+// src/core/session-search.ts
+function searchSessions(sessions, query) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) {
+    return sessions;
+  }
+  return sessions.filter((session) => {
+    return [
+      session.sessionId,
+      session.title,
+      session.cwd,
+      session.firstUserMessage,
+      session.lastAssistantMessage
+    ].filter((value) => Boolean(value)).some((value) => value.toLowerCase().includes(normalized));
+  });
+}
+
+// src/cli/run-app.ts
+var DEFAULT_LIMIT = 20;
+async function runApp(command) {
+  const paths = detectCodexPaths();
+  const index = await buildSessionIndex(paths.sessionsDir);
+  const sessions = searchSessions(index, command.query).slice(0, DEFAULT_LIMIT);
+  if (sessions.length === 0) {
+    console.log(`No sessions found in ${paths.sessionsDir}`);
+    if (command.query) {
+      console.log(`(query: "${command.query}")`);
+    }
+    return;
+  }
+  console.log("Recent Codex sessions (stopgap picker \u2014 full TUI in progress):");
+  console.log("");
+  for (const [i, s] of sessions.entries()) {
+    const num = String(i + 1).padStart(2, " ");
+    const when = (s.updatedAt ?? "unknown").substring(0, 19);
+    const title = (s.title ?? "").substring(0, 60).replace(/\s+/g, " ");
+    console.log(`  ${num}) ${when}  ${title}`);
+  }
+  console.log("");
+  if (!stdin.isTTY) {
+    console.log("(stdin is not a TTY \u2014 run interactively or use `codex-resume resume <id>`.)");
+    return;
+  }
+  const rl = createInterface({ input: stdin, output: stdout });
+  const answer = (await rl.question("Pick number (q to quit): ")).trim();
+  rl.close();
+  if (!answer || answer.toLowerCase() === "q") {
+    return;
+  }
+  const idx = Number.parseInt(answer, 10) - 1;
+  if (Number.isNaN(idx) || idx < 0 || idx >= sessions.length) {
+    console.log(`Invalid selection: ${answer}`);
+    return;
+  }
+  const chosen = sessions[idx];
+  if (!chosen) {
+    console.log(`Invalid selection: ${answer}`);
+    return;
+  }
+  console.log(`Resuming ${chosen.sessionId} \u2026`);
+  await runResume({ kind: "resume", sessionId: chosen.sessionId });
+}
+
+// src/cli/run-doctor.ts
+import { access } from "node:fs/promises";
+import { constants } from "node:fs";
+
+// src/infra/command-exists.ts
+import { spawn as spawn2 } from "node:child_process";
+async function commandExists(command) {
+  const probe = process.platform === "win32" ? "where.exe" : "command";
+  const args = process.platform === "win32" ? [command] : ["-v", command];
+  return new Promise((resolve) => {
+    const child = spawn2(probe, args, { stdio: "ignore", shell: process.platform !== "win32" });
+    child.on("error", () => resolve(false));
+    child.on("exit", (code) => resolve(code === 0));
+  });
+}
+
+// src/cli/run-doctor.ts
+async function runDoctor() {
+  const paths = detectCodexPaths();
+  const sessionsReadable = await isReadable(paths.sessionsDir);
+  const cacheReadable = await isReadable(paths.cacheDir);
+  const codexCommand = resolveCodexCommand();
+  const codexAvailable = await commandExists(codexCommand);
+  console.log("codex-resume doctor");
+  console.log(`codex home: ${paths.codexHome}`);
+  console.log(`sessions dir: ${paths.sessionsDir}`);
+  console.log(`cache dir: ${paths.cacheDir}`);
+  console.log(`sessions readable: ${sessionsReadable}`);
+  console.log(`cache readable: ${cacheReadable}`);
+  console.log(`codex command: ${codexCommand}`);
+  console.log(`codex available: ${codexAvailable}`);
+  if (!codexAvailable) {
+    console.log("hint: install Codex CLI with `npm install -g @openai/codex` or set CODEX_RESUME_CODEX_BIN.");
+  }
+}
+async function isReadable(path) {
+  try {
+    await access(path, constants.R_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// src/cli/run-index.ts
+async function runIndex() {
+  const paths = detectCodexPaths();
+  const sessions = await buildSessionIndex(paths.sessionsDir);
+  console.log(`indexed sessions: ${sessions.length}`);
+}
+
+// src/cli/run-list.ts
+async function runList(command) {
+  const paths = detectCodexPaths();
+  const sessions = searchSessions(await buildSessionIndex(paths.sessionsDir), command.query).slice(0, command.limit);
+  if (command.json) {
+    console.log(JSON.stringify(sessions, null, 2));
+    return;
+  }
+  for (const [index, session] of sessions.entries()) {
+    console.log(`${String(index + 1).padStart(2, " ")} ${session.updatedAt ?? "unknown"} ${session.sessionId} ${session.title ?? ""}`.trim());
+  }
 }
 
 // src/main.ts
