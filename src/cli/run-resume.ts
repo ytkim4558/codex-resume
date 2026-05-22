@@ -3,6 +3,7 @@ import { buildSessionIndex } from "../core/session-indexer.js";
 import { buildResumeCommand } from "../core/session-resumer.js";
 import { detectCodexPaths } from "../infra/codex-paths.js";
 import { runCommand } from "../infra/process-runner.js";
+import { existsSync } from "node:fs";
 
 export async function runResume(command: ResumeCommand): Promise<void> {
   const sessions = await buildSessionIndex(detectCodexPaths().sessionsDir);
@@ -12,6 +13,13 @@ export async function runResume(command: ResumeCommand): Promise<void> {
   }
 
   const [binary, ...args] = buildResumeCommand(session);
-  const code = await runCommand(binary, args);
+  const targetCwd = command.here ? undefined : command.cwd ?? session.cwd;
+  const cwd = targetCwd && existsSync(targetCwd) ? targetCwd : undefined;
+  if (targetCwd && !cwd) {
+    console.log(`Target cwd no longer exists; resuming from current directory: ${targetCwd}`);
+  } else if (cwd) {
+    console.log(`Opening Codex in ${cwd}`);
+  }
+  const code = await runCommand(binary, args, { cwd });
   process.exitCode = code;
 }

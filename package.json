@@ -11,12 +11,16 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "build": "node dist/main.js --version",
-    "check": "node dist/main.js doctor",
+    "build": "tsc --noEmit && node dist/main.js --version",
+    "check": "tsc --noEmit && node dist/main.js doctor",
     "dev": "node dist/main.js",
     "start": "node dist/main.js"
   },
   "dependencies": {
     "blessed": "^0.1.81"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^6.0.3"
   }
 }

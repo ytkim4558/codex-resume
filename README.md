@@ -9,7 +9,7 @@ OpenAI Codex CLI 세션을 빠르게 검색하고 이어갈 수 있게 만드는
 - 최근 세션 검색
 - 현재 workspace 기준 필터링
 - 대화 preview 확인
-- 선택한 세션을 `codex resume <session-id>` 로 재개
+- 선택한 세션의 원래 작업 폴더에서 `codex resume <session-id>` 로 재개
 
 ## 목표
 
@@ -33,11 +33,14 @@ codex-resume doctor
 codex-resume index
 codex-resume list --json
 codex-resume resume <session-id>
+codex-resume resume <session-id> --cwd C:\Users\ytkim\projects\some-project
+codex-resume resume <session-id> --here
 ```
 
 `codex-resume` 는 세션 목록을 `%USERPROFILE%\.codex\sessions` 에서 읽기 때문에 어느 폴더에서 실행해도 목록 조회는 가능하다.
-다만 `Enter` 또는 `resume <session-id>` 로 실제 `codex resume` 을 시작하면 **그때의 현재 폴더가 새 Codex 세션의 작업 폴더**가 된다.
-사이트 작업은 `GitHubPageMaker`, 도구 작업은 `codex-resume` 처럼 실제 수정할 프로젝트 폴더에서 실행하는 편이 안전하다.
+`Enter` 또는 `resume <session-id>` 로 실제 `codex resume` 을 시작하면 세션 로그에 기록된 `cwd` 를 사용해 **원래 프로젝트 폴더에서 Codex를 다시 연다**.
+기록된 폴더가 삭제되었거나 이동된 경우에는 현재 폴더에서 재개한다.
+과거 세션의 `cwd` 가 홈 폴더처럼 애매하게 기록된 경우에는 `--cwd <path>` 로 열 위치를 직접 지정할 수 있고, `--here` 를 붙이면 예전 방식처럼 현재 폴더에서 재개한다.
 
 Windows 에서 `codex` 명령이 PATH 에 없으면 다음 환경변수로 실제 CLI 경로를 지정할 수 있다.
 

@@ -7,9 +7,14 @@ import { spawn } from "node:child_process";
 // Session IDs are UUIDs so no shell-metachar injection risk for our case.
 const isWindows = process.platform === "win32";
 
-export async function runCommand(command: string, args: string[]): Promise<number> {
+export type RunCommandOptions = {
+  cwd?: string;
+};
+
+export async function runCommand(command: string, args: string[], options: RunCommandOptions = {}): Promise<number> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
+      cwd: options.cwd,
       stdio: "inherit",
       shell: isWindows,
       windowsHide: true,

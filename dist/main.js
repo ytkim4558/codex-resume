@@ -24,9 +24,14 @@ function parseArgv(argv) {
   if (first === "resume") {
     const sessionId = rest[0];
     if (!sessionId) {
-      throw new Error("Usage: codex-resume resume <session-id>");
+      throw new Error("Usage: codex-resume resume <session-id> [--cwd <path>] [--here]");
     }
-    return { kind: "resume", sessionId };
+    return {
+      kind: "resume",
+      sessionId,
+      cwd: stringOption(rest, "--cwd"),
+      here: rest.includes("--here")
+    };
   }
   if (first === "search") {
     return { kind: "app", query: rest.join(" ") };
@@ -79,6 +84,10 @@ async function parseSessionFile(filePath) {
         cwd = stringField(record.payload, "cwd") ?? cwd;
         cliVersion = stringField(record.payload, "cli_version") ?? cliVersion;
         startedAt = stringField(record.payload, "timestamp") ?? startedAt;
+        continue;
+      }
+      if (record.type === "turn_context" && isRecord(record.payload)) {
+        cwd = stringField(record.payload, "cwd") ?? cwd;
         continue;
       }
       if (record.type === "user_message" && isRecord(record.payload)) {
@@ -232,9 +241,10 @@ function detectCodexPaths() {
 // src/infra/process-runner.ts
 import { spawn } from "node:child_process";
 var isWindows = process.platform === "win32";
-async function runCommand(command, args) {
+async function runCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
+      cwd: options.cwd,
       stdio: "inherit",
       shell: isWindows,
       windowsHide: true
@@ -266,7 +276,14 @@ async function runResume(command) {
     throw new Error(`Session not found: ${command.sessionId}`);
   }
   const [binary, ...args] = buildResumeCommand(session);
-  const code = await runCommand(binary, args);
+  const targetCwd = command.here ? void 0 : command.cwd ?? session.cwd;
+  const cwd = targetCwd && existsSync(targetCwd) ? targetCwd : void 0;
+  if (targetCwd && !cwd) {
+    console.log(`Target cwd no longer exists; resuming from current directory: ${targetCwd}`);
+  } else if (cwd) {
+    console.log(`Opening Codex in ${cwd}`);
+  }
+  const code = await runCommand(binary, args, { cwd });
   process.exitCode = code;
 }
 
@@ -306,7 +323,8 @@ async function runApp(command) {
     const num = String(i + 1).padStart(2, " ");
     const when = (s.updatedAt ?? "unknown").substring(0, 19);
     const title = (s.title ?? "").substring(0, 60).replace(/\s+/g, " ");
-    console.log(`  ${num}) ${when}  ${title}`);
+    const cwd = s.cwd ? `  [${s.cwd}]` : "";
+    console.log(`  ${num}) ${when}  ${title}${cwd}`);
   }
   console.log("");
   if (!stdin.isTTY) {
@@ -329,8 +347,8 @@ async function runApp(command) {
     console.log(`Invalid selection: ${answer}`);
     return;
   }
-  console.log(`Resuming ${chosen.sessionId} \u2026`);
-  await runResume({ kind: "resume", sessionId: chosen.sessionId });
+  console.log(`Resuming ${chosen.sessionId} ...`);
+  await runResume({ kind: "resume", sessionId: chosen.sessionId, here: false });
 }
 
 // src/cli/run-doctor.ts
@@ -393,7 +411,8 @@ async function runList(command) {
     return;
   }
   for (const [index, session] of sessions.entries()) {
-    console.log(`${String(index + 1).padStart(2, " ")} ${session.updatedAt ?? "unknown"} ${session.sessionId} ${session.title ?? ""}`.trim());
+    const cwd = session.cwd ? ` [${session.cwd}]` : "";
+    console.log(`${String(index + 1).padStart(2, " ")} ${session.updatedAt ?? "unknown"} ${session.sessionId} ${session.title ?? ""}${cwd}`.trim());
   }
 }
 

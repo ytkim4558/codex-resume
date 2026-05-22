@@ -31,7 +31,8 @@ export async function runApp(command: AppCommand): Promise<void> {
     const num = String(i + 1).padStart(2, " ");
     const when = (s.updatedAt ?? "unknown").substring(0, 19);
     const title = (s.title ?? "").substring(0, 60).replace(/\s+/g, " ");
-    console.log(`  ${num}) ${when}  ${title}`);
+    const cwd = s.cwd ? `  [${s.cwd}]` : "";
+    console.log(`  ${num}) ${when}  ${title}${cwd}`);
   }
   console.log("");
 
@@ -59,6 +60,6 @@ export async function runApp(command: AppCommand): Promise<void> {
     console.log(`Invalid selection: ${answer}`);
     return;
   }
-  console.log(`Resuming ${chosen.sessionId} …`);
-  await runResume({ kind: "resume", sessionId: chosen.sessionId });
+  console.log(`Resuming ${chosen.sessionId} ...`);
+  await runResume({ kind: "resume", sessionId: chosen.sessionId, here: false });
 }

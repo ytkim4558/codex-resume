@@ -33,6 +33,11 @@ export async function parseSessionFile(filePath: string): Promise<ParsedSessionF
         continue;
       }
 
+      if (record.type === "turn_context" && isRecord(record.payload)) {
+        cwd = stringField(record.payload, "cwd") ?? cwd;
+        continue;
+      }
+
       if (record.type === "user_message" && isRecord(record.payload)) {
         const contentField = stringField(record.payload, "message");
         if (contentField && !isNoiseMessage(contentField)) {

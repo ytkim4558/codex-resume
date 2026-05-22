@@ -13,6 +13,7 @@ export async function runList(command: ListCommand): Promise<void> {
   }
 
   for (const [index, session] of sessions.entries()) {
-    console.log(`${String(index + 1).padStart(2, " ")} ${session.updatedAt ?? "unknown"} ${session.sessionId} ${session.title ?? ""}`.trim());
+    const cwd = session.cwd ? ` [${session.cwd}]` : "";
+    console.log(`${String(index + 1).padStart(2, " ")} ${session.updatedAt ?? "unknown"} ${session.sessionId} ${session.title ?? ""}${cwd}`.trim());
   }
 }

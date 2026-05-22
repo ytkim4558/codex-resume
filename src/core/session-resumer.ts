@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { SessionRecord } from "./models.js";
 
-export function buildResumeCommand(session: SessionRecord): string[] {
+export function buildResumeCommand(session: SessionRecord): [string, ...string[]] {
   return [resolveCodexCommand(), "resume", session.sessionId];
 }
 

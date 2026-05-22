@@ -21,6 +21,8 @@ export type ListCommand = {
 export type ResumeCommand = {
   kind: "resume";
   sessionId: string;
+  cwd?: string;
+  here: boolean;
 };
 
 export type VersionCommand = {
@@ -60,9 +62,14 @@ export function parseArgv(argv: string[]): Command {
   if (first === "resume") {
     const sessionId = rest[0];
     if (!sessionId) {
-      throw new Error("Usage: codex-resume resume <session-id>");
+      throw new Error("Usage: codex-resume resume <session-id> [--cwd <path>] [--here]");
     }
-    return { kind: "resume", sessionId };
+    return {
+      kind: "resume",
+      sessionId,
+      cwd: stringOption(rest, "--cwd"),
+      here: rest.includes("--here")
+    };
   }
 
   if (first === "search") {
