@@ -119,14 +119,16 @@ async function runBlessedPicker(blessed, sessions, initialQuery) {
         setHeader();
         screen.render?.();
     }
-    list.on("select item", () => {
+    function resumeSelected() {
         const session = selectedSession();
         if (!session)
             return;
         screen.destroy?.();
         void runResume({ kind: "resume", sessionId: session.sessionId, here: false });
-    });
+    }
     list.on("select", updatePreview);
+    screen.key(["enter", "return"], resumeSelected);
+    list.key(["enter", "return"], resumeSelected);
     screen.key(["escape", "q", "C-c"], () => {
         screen.destroy?.();
     });
