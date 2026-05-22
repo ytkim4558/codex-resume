@@ -11,7 +11,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "build": "tsc --noEmit && node dist/main.js --version",
+    "build": "tsc && node dist/main.js --version",
     "check": "tsc --noEmit && node dist/main.js doctor",
     "dev": "node dist/main.js",
     "start": "node dist/main.js"

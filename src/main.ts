@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { parseArgv } from "./cli/parse-argv.js";
 import { runApp } from "./cli/run-app.js";
 import { runDoctor } from "./cli/run-doctor.js";
