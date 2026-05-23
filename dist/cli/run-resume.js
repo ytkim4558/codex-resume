@@ -12,6 +12,14 @@ export async function runResume(command) {
     const [binary, ...args] = buildResumeCommand(session);
     const targetCwd = command.here ? undefined : command.cwd ?? session.cwd;
     const cwd = targetCwd && existsSync(targetCwd) ? targetCwd : undefined;
+    if (command.dryRun) {
+        if (targetCwd && !cwd) {
+            console.log(`Target cwd no longer exists; would use current directory: ${targetCwd}`);
+        }
+        console.log(`Would run: ${formatCommand([binary, ...args])}`);
+        console.log(`CWD: ${cwd ?? process.cwd()}`);
+        return;
+    }
     if (targetCwd && !cwd) {
         console.log(`Target cwd no longer exists; resuming from current directory: ${targetCwd}`);
     }
@@ -20,4 +28,7 @@ export async function runResume(command) {
     }
     const code = await runCommand(binary, args, { cwd });
     process.exitCode = code;
+}
+function formatCommand(parts) {
+    return parts.map((part) => part.includes(" ") ? `"${part}"` : part).join(" ");
 }

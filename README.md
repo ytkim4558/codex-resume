@@ -35,12 +35,14 @@ codex-resume list --json
 codex-resume resume <session-id>
 codex-resume resume <session-id> --cwd C:\Users\ytkim\projects\some-project
 codex-resume resume <session-id> --here
+codex-resume resume <session-id> --dry-run
 ```
 
 `codex-resume` 는 세션 목록을 `%USERPROFILE%\.codex\sessions` 에서 읽기 때문에 어느 폴더에서 실행해도 목록 조회는 가능하다.
 `Enter` 또는 `resume <session-id>` 로 실제 `codex resume` 을 시작하면 세션 로그에 기록된 `cwd` 를 사용해 **원래 프로젝트 폴더에서 Codex를 다시 연다**.
 기록된 폴더가 삭제되었거나 이동된 경우에는 현재 폴더에서 재개한다.
 과거 세션의 `cwd` 가 홈 폴더처럼 애매하게 기록된 경우에는 `--cwd <path>` 로 열 위치를 직접 지정할 수 있고, `--here` 를 붙이면 예전 방식처럼 현재 폴더에서 재개한다.
+`--dry-run` 을 붙이면 실제 Codex를 실행하지 않고 실행 예정 명령과 작업 폴더만 출력한다. TUI도 `codex-resume --dry-run` 으로 실행하면 Enter 동작을 안전하게 확인할 수 있다.
 
 Windows 에서 `codex` 명령이 PATH 에 없으면 다음 환경변수로 실제 CLI 경로를 지정할 수 있다.
 

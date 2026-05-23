@@ -25,12 +25,12 @@ export async function runApp(command) {
     }
     const blessed = loadBlessed();
     if (blessed) {
-        await runBlessedPicker(blessed, sessions, command.query);
+        await runBlessedPicker(blessed, sessions, command.query, command.dryRun);
         return;
     }
-    await runRawPicker(sessions, command.query);
+    await runRawPicker(sessions, command.query, command.dryRun);
 }
-async function runBlessedPicker(blessed, sessions, initialQuery) {
+async function runBlessedPicker(blessed, sessions, initialQuery, dryRun) {
     let query = initialQuery;
     let filtered = searchSessions(sessions, query);
     const screen = blessed.screen({
@@ -119,15 +119,19 @@ async function runBlessedPicker(blessed, sessions, initialQuery) {
         setHeader();
         screen.render?.();
     }
+    let resumeStarted = false;
+    let resumePromise;
     function resumeSelected() {
+        if (resumeStarted)
+            return;
         const session = selectedSession();
         if (!session)
             return;
+        resumeStarted = true;
         screen.destroy?.();
-        void runResume({ kind: "resume", sessionId: session.sessionId, here: false });
+        resumePromise = runResume({ kind: "resume", sessionId: session.sessionId, here: false, dryRun });
     }
-    list.on("select", updatePreview);
-    screen.key(["enter", "return"], resumeSelected);
+    list.on("select item", updatePreview);
     list.key(["enter", "return"], resumeSelected);
     screen.key(["escape", "q", "C-c"], () => {
         screen.destroy?.();
@@ -159,8 +163,9 @@ async function runBlessedPicker(blessed, sessions, initialQuery) {
     updateList(0);
     list.focus?.();
     await new Promise((resolve) => screen.on("destroy", () => resolve()));
+    await resumePromise;
 }
-async function runRawPicker(sessions, initialQuery) {
+async function runRawPicker(sessions, initialQuery, dryRun) {
     let query = initialQuery;
     let cursor = 0;
     let filtered = searchSessions(sessions, query);
@@ -215,7 +220,7 @@ async function runRawPicker(sessions, initialQuery) {
                         const selected = filtered[cursor];
                         cleanup();
                         if (selected) {
-                            await runResume({ kind: "resume", sessionId: selected.sessionId, here: false });
+                            await runResume({ kind: "resume", sessionId: selected.sessionId, here: false, dryRun });
                         }
                         resolve();
                         return;

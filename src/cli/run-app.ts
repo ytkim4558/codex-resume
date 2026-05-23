@@ -56,14 +56,14 @@ export async function runApp(command: AppCommand): Promise<void> {
 
   const blessed = loadBlessed();
   if (blessed) {
-    await runBlessedPicker(blessed, sessions, command.query);
+    await runBlessedPicker(blessed, sessions, command.query, command.dryRun);
     return;
   }
 
-  await runRawPicker(sessions, command.query);
+  await runRawPicker(sessions, command.query, command.dryRun);
 }
 
-async function runBlessedPicker(blessed: Blessed, sessions: SessionRecord[], initialQuery: string): Promise<void> {
+async function runBlessedPicker(blessed: Blessed, sessions: SessionRecord[], initialQuery: string, dryRun: boolean): Promise<void> {
   let query = initialQuery;
   let filtered = searchSessions(sessions, query);
 
@@ -163,16 +163,20 @@ async function runBlessedPicker(blessed: Blessed, sessions: SessionRecord[], ini
     screen.render?.();
   }
 
+  let resumeStarted = false;
+  let resumePromise: Promise<void> | undefined;
+
   function resumeSelected(): void {
+    if (resumeStarted) return;
     const session = selectedSession();
     if (!session) return;
+    resumeStarted = true;
     screen.destroy?.();
-    void runResume({ kind: "resume", sessionId: session.sessionId, here: false });
+    resumePromise = runResume({ kind: "resume", sessionId: session.sessionId, here: false, dryRun });
   }
 
-  list.on("select", updatePreview);
+  list.on("select item", updatePreview);
 
-  screen.key(["enter", "return"], resumeSelected);
   list.key(["enter", "return"], resumeSelected);
 
   screen.key(["escape", "q", "C-c"], () => {
@@ -207,9 +211,10 @@ async function runBlessedPicker(blessed: Blessed, sessions: SessionRecord[], ini
   updateList(0);
   list.focus?.();
   await new Promise<void>((resolve) => screen.on("destroy", () => resolve()));
+  await resumePromise;
 }
 
-async function runRawPicker(sessions: SessionRecord[], initialQuery: string): Promise<void> {
+async function runRawPicker(sessions: SessionRecord[], initialQuery: string, dryRun: boolean): Promise<void> {
   let query = initialQuery;
   let cursor = 0;
   let filtered = searchSessions(sessions, query);
@@ -268,7 +273,7 @@ async function runRawPicker(sessions: SessionRecord[], initialQuery: string): Pr
             const selected = filtered[cursor];
             cleanup();
             if (selected) {
-              await runResume({ kind: "resume", sessionId: selected.sessionId, here: false });
+              await runResume({ kind: "resume", sessionId: selected.sessionId, here: false, dryRun });
             }
             resolve();
             return;

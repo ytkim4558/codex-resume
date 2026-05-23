@@ -1,6 +1,7 @@
 export type AppCommand = {
   kind: "app";
   query: string;
+  dryRun: boolean;
 };
 
 export type DoctorCommand = {
@@ -23,6 +24,7 @@ export type ResumeCommand = {
   sessionId: string;
   cwd?: string;
   here: boolean;
+  dryRun: boolean;
 };
 
 export type VersionCommand = {
@@ -32,10 +34,12 @@ export type VersionCommand = {
 export type Command = AppCommand | DoctorCommand | IndexCommand | ListCommand | ResumeCommand | VersionCommand;
 
 export function parseArgv(argv: string[]): Command {
-  const [first, ...rest] = argv;
+  const dryRun = argv.includes("--dry-run");
+  const cleanedArgv = argv.filter((arg) => arg !== "--dry-run");
+  const [first, ...rest] = cleanedArgv;
 
   if (!first) {
-    return { kind: "app", query: "" };
+    return { kind: "app", query: "", dryRun };
   }
 
   if (first === "--version" || first === "-v") {
@@ -62,21 +66,22 @@ export function parseArgv(argv: string[]): Command {
   if (first === "resume") {
     const sessionId = rest[0];
     if (!sessionId) {
-      throw new Error("Usage: codex-resume resume <session-id> [--cwd <path>] [--here]");
+      throw new Error("Usage: codex-resume resume <session-id> [--cwd <path>] [--here] [--dry-run]");
     }
     return {
       kind: "resume",
       sessionId,
       cwd: stringOption(rest, "--cwd"),
-      here: rest.includes("--here")
+      here: rest.includes("--here"),
+      dryRun
     };
   }
 
   if (first === "search") {
-    return { kind: "app", query: rest.join(" ") };
+    return { kind: "app", query: rest.join(" "), dryRun };
   }
 
-  return { kind: "app", query: [first, ...rest].join(" ") };
+  return { kind: "app", query: [first, ...rest].join(" "), dryRun };
 }
 
 function numberOption(argv: string[], name: string): number | undefined {
