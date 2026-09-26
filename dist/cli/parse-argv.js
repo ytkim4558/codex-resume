@@ -35,6 +35,15 @@ export function parseArgv(argv) {
             dryRun
         };
     }
+    if (first === "title") {
+        const target = stringOption(rest, "--target");
+        const titleParts = rest.filter((arg, index) => arg !== "--target" && rest[index - 1] !== "--target");
+        const title = titleParts.join(" ").trim();
+        if (!title) {
+            throw new Error("Usage: codex-resume title <tab-title> [--target <window-title-fragment>] [--dry-run]");
+        }
+        return { kind: "title", title, target, dryRun };
+    }
     if (first === "search") {
         return { kind: "app", query: rest.join(" "), dryRun };
     }

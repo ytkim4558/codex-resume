@@ -5,6 +5,7 @@ import { runDoctor } from "./cli/run-doctor.js";
 import { runIndex } from "./cli/run-index.js";
 import { runList } from "./cli/run-list.js";
 import { runResume } from "./cli/run-resume.js";
+import { runTitle } from "./cli/run-title.js";
 
 const VERSION = "0.1.0";
 
@@ -26,6 +27,9 @@ async function main(): Promise<void> {
       return;
     case "resume":
       await runResume(command);
+      return;
+    case "title":
+      await runTitle(command);
       return;
     case "version":
       console.log(`codex-resume ${VERSION}`);

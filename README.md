@@ -36,6 +36,8 @@ codex-resume resume <session-id>
 codex-resume resume <session-id> --cwd C:\Users\ytkim\projects\some-project
 codex-resume resume <session-id> --here
 codex-resume resume <session-id> --dry-run
+codex-resume title "Codex 작업"
+codex-resume title "Codex 작업" --target "Ready (ytkim)"
 ```
 
 `codex-resume` 는 세션 목록을 `%USERPROFILE%\.codex\sessions` 에서 읽기 때문에 어느 폴더에서 실행해도 목록 조회는 가능하다.
@@ -53,6 +55,17 @@ Windows 에서 `codex` 명령이 PATH 에 없으면 다음 환경변수로 실�
   'User'
 )
 ```
+
+## Windows Terminal 탭 제목
+
+`codex-resume title <name>` 은 Windows Terminal 의 현재/대상 창 탭 제목을 바꾸기 위한
+보조 명령이다. Windows Terminal 에 직접 `wt rename-tab` CLI 는 없으므로, 이 명령은
+`settings.json` 에 `renameTab` 액션과 `Ctrl+Alt+Shift+T` 단축키를 보장한 뒤 해당
+단축키를 전송한다.
+
+창이 여러 개 열려 있으면 `--target <window-title-fragment>` 로 대상 Windows Terminal
+창 제목 일부를 지정하는 편이 안전하다. 대상 없이 실행하면 가장 나중에 생성된
+Windows Terminal 창을 사용한다.
 
 ## 조작
 

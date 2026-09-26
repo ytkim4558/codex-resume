@@ -27,11 +27,18 @@ export type ResumeCommand = {
   dryRun: boolean;
 };
 
+export type TitleCommand = {
+  kind: "title";
+  title: string;
+  target?: string;
+  dryRun: boolean;
+};
+
 export type VersionCommand = {
   kind: "version";
 };
 
-export type Command = AppCommand | DoctorCommand | IndexCommand | ListCommand | ResumeCommand | VersionCommand;
+export type Command = AppCommand | DoctorCommand | IndexCommand | ListCommand | ResumeCommand | TitleCommand | VersionCommand;
 
 export function parseArgv(argv: string[]): Command {
   const dryRun = argv.includes("--dry-run");
@@ -75,6 +82,16 @@ export function parseArgv(argv: string[]): Command {
       here: rest.includes("--here"),
       dryRun
     };
+  }
+
+  if (first === "title") {
+    const target = stringOption(rest, "--target");
+    const titleParts = rest.filter((arg, index) => arg !== "--target" && rest[index - 1] !== "--target");
+    const title = titleParts.join(" ").trim();
+    if (!title) {
+      throw new Error("Usage: codex-resume title <tab-title> [--target <window-title-fragment>] [--dry-run]");
+    }
+    return { kind: "title", title, target, dryRun };
   }
 
   if (first === "search") {
